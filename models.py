@@ -2,7 +2,6 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.rnn as rnn
-from constants import constants
 
 
 def normalized_columns_initializer(std=1.0):
