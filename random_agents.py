@@ -15,7 +15,10 @@ def main():
     best_reward = -21
     cur_reward = 0
     state = env.reset()
-    for i_ep in range(TRAINING_FRAMES):
+    for i_f in range(1, TRAINING_FRAMES+1):
+        if i_f % int(1e5) == 0:
+            print('# frame: %i. Best reward so far: %i.' % (i_f, best_reward,))
+
         action = np.random.choice(nA)
         next_state, reward, done, _ = env.step(action)
         cur_reward += reward
