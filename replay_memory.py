@@ -19,13 +19,12 @@ class ReplayMemory(object):
 
     def sample(self, batch_size):
         rand_idx = [random.randint(0, len(self.storage)-1) for _ in range(batch_size)]
-        states, actions, rewards, next_states, dones = [], [], [], [], []
+        states, actions, rewards, next_states = [], [], [], []
         for i in rand_idx:
             data = self.storage[i]
-            state, action, reward, next_state, done = data
+            state, action, reward, next_state = data
             states.append(np.array(state, copy=False))
             actions.append(np.array(action, copy=False))
             rewards.append(reward)
             next_states.append(np.array(next_state, copy=False))
-            dones.append(done)
-        return np.array(states), np.array(actions), np.array(rewards), np.array(next_states), np.array(dones)
+        return np.array(states), np.array(actions), np.array(rewards), np.array(next_states)
