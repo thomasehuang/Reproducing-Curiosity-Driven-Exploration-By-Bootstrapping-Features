@@ -3,6 +3,7 @@ import gym
 import tensorflow as tf
 from embedding import *
 from policy import *
+from forward_dynamics import *
 
 from atari_wrappers import wrap_deepmind
 from replay_memory import ReplayMemory
@@ -47,16 +48,21 @@ if __name__ == '__main__':
     s = env.reset()
     s_arr = np.array(s)
 
+    a = env.action_space.sample()
+    s_,_,_,_ = env.step(a)
+    s__arr = np.array(s_)
+
+
     with tf.Session() as sess:
 
         emb = CnnEmbedding("embedding", env.observation_space, env.action_space)
         policy = Policy("policy", env.action_space)
+        fd = ForwardDynamics("forward_dynamics", env.observation_space, env.action_space)
 
         sess.run(tf.global_variables_initializer())
 
-        obs = emb.embed(s_arr)
-        print(tf.shape(obs))
-        probs, value = policy.act(obs[0])
-        print(probs, value)
+        phi = emb.embed(s_arr)
+        probs, value = policy.act(phi[0])
+        fd.get_loss(s_arr, s__arr, np.eye(env.action_space.n)[a])
 
 

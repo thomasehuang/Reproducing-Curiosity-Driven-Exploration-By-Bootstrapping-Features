@@ -1,7 +1,6 @@
 #!/bin/sh python3
 
 import tensorflow as tf
-import numpy as np
 import gym
 from models import linear, normalized_columns_initializer
 from utils import get_placeholder

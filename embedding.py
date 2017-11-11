@@ -27,7 +27,8 @@ class CnnEmbedding(object):
     def embed(self, state):
         sess = tf.get_default_session()
         return sess.run([self.x], {self.input: np.expand_dims(state, axis=0)})
-
+    def get_input_and_last_layer(self):
+        return [self.input, self.x]
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
     def get_trainable_variables(self):
