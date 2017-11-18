@@ -64,14 +64,14 @@ class PPO(object):
 
         var_list = self.pi.get_trainable_variables()
         self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
-        adam = MpiAdam(var_list, epsilon=adam_epsilon)
+        self.adam = MpiAdam(var_list, epsilon=adam_epsilon)
 
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(oldpi.get_variables(), self.pi.get_variables())])
         # self.compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
         U.initialize()
-        adam.sync()
+        self.adam.sync()
 
         # Prepare for rollouts
         # ----------------------------------------
@@ -98,7 +98,7 @@ class PPO(object):
         ob, ac, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
-        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
+        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not self.pi.recurrent)
         self.optim_batchsize = self.optim_batchsize or ob.shape[0]
 
         # NOTE: won't run since CNN policy doesn't have this attribute
@@ -110,7 +110,7 @@ class PPO(object):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
             for b in d.iterate_once(self.optim_batchsize):
                 *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                adam.update(g, self.optim_stepsize * cur_lrmult) 
+                self.adam.update(g, self.optim_stepsize * cur_lrmult) 
                 losses.append(newlosses)
 
         # Compute timesteps update
