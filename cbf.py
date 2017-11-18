@@ -1,3 +1,4 @@
+# TODO integrate PPO
 import numpy as np
 import gym
 import tensorflow as tf
@@ -9,25 +10,38 @@ from atari_wrappers import wrap_deepmind
 from replay_memory import ReplayMemory
 
 
-N_ROLLOUTS = 10
-LEN_ROLLOUTS = 10
-N_OPTIMIZATIONS = 1
-REPLAY_SIZE = 1000
-BATCH_SIZE = 128
-
-
-def cbf(env, policy):
+def cbf(env,
+        n_rollouts,
+        len_rollouts,
+        n_optimizations,
+        embedding_space_size,
+        learning_rate):
+    # Init
+    emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
+    fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
+    # Make policy
     replay_memory = ReplayMemory(REPLAY_SIZE)
-    t = 0
+    sess = tf.get_default_session()
+    sess.run(tf.global_variables_initializer())
+
     s = env.reset()
-    for i in range(N_ROLLOUTS):
-        for j in range(LEN_ROLLOUTS):
-            #a = policy.act() # assuming we have a policy class
-            a = env.action_space.sample()
+    t = 0
+
+    for i in range(n_rollouts):
+        for j in range(len_rollouts):
+            a = env.action_space.sample() # TODO replace with policy
             s_ , _, done, _ = env.step(a) # ignoring reward from env
-            r = 0 # compute intrinsic reward TODO implement f and phi
+
+            s = np.array(s)
+            s_ = np.array(s_)
+
+            # compute intrinsic reward
+            obs1 = emb.embed(s)
+            obs2 = emb.embed(s_)
+            r = fd.get_loss(obs1, obs2, np.eye(env.action_space.n)[a])
             replay_memory.add((s, a, r, s_))
 
+            # Prepare for next step
             t += 1
             if done:
                 s = env.reset()
@@ -37,35 +51,26 @@ def cbf(env, policy):
             # optimize theta_pi (and optionally theta_phi) wrt PPO loss
             states, actions, rewards, next_states = replay_memory.sample(BATCH_SIZE) # minibatch from replay memory
             # optimize theta_f wtf forward dynamics loss on minibatch
+                #fd.train(obs1, obs2, np.eye(env.action_space.n)[a], 0.5)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
 
+N_ROLLOUTS = 1
+LEN_ROLLOUTS = 1
+N_OPTIMIZATIONS = 1
+EMBEDDING_SPACE_SIZE = 512
+REPLAY_SIZE = 1000
+BATCH_SIZE = 128
+LEARNING_RATE = 0.5
+
 if __name__ == '__main__':
-    env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
-    policy = None
-    #cbf(env, policy)
-
-    s = env.reset()
-    s_arr = np.array(s)
-
-    for _ in range(100):
-        a = env.action_space.sample()
-        s_,_,_,_ = env.step(a)
-    s__arr = np.array(s_)
-
-
-    FD_LEARNING_RATE = 0.5
     with tf.Session() as sess:
-        embedding_space_size = 512
-        emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
-        #policy = Policy("policy", env.observation_space, env.action_space, emb)
-        fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
+        env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
+        cbf(env,
+            N_ROLLOUTS,
+            LEN_ROLLOUTS,
+            N_OPTIMIZATIONS,
+            EMBEDDING_SPACE_SIZE,
+            LEARNING_RATE
+            )
 
-        sess.run(tf.global_variables_initializer())
-
-        obs1 = emb.embed(s_arr)
-        obs2 = emb.embed(s__arr)
-        fd.get_loss(obs1, obs2, np.eye(env.action_space.n)[a])
-        fd.train(obs1, obs2, np.eye(env.action_space.n)[a], 0.5)
-
-        print(fd.get_trainable_variables())
