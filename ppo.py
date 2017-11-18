@@ -99,7 +99,7 @@ class PPO(object):
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
         d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
-        optim_batchsize = optim_batchsize or ob.shape[0]
+        self.optim_batchsize = self.optim_batchsize or ob.shape[0]
 
         # NOTE: won't run since CNN policy doesn't have this attribute
         if hasattr(self.pi, "ob_rms"): self.pi.ob_rms.update(ob) # update running mean/std for policy
@@ -108,8 +108,8 @@ class PPO(object):
         # Here we do a bunch of optimization epochs over the data
         for _ in range(self.optim_epochs):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
-            for batch in d.iterate_once(self.optim_batchsize):
-                *newlosses, g = self.lossandgrad(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], cur_lrmult)
+            for b in d.iterate_once(self.optim_batchsize):
+                *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
                 adam.update(g, self.optim_stepsize * cur_lrmult) 
                 losses.append(newlosses)
 
