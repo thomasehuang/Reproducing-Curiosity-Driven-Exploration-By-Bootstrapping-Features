@@ -1,6 +1,10 @@
 #!/bin/sh python3
 import tensorflow as tf  # pylint: ignore-module
 
+def mean(x, axis=None, keepdims=False):
+    axis = None if axis is None else [axis]
+    return tf.reduce_mean(x, axis=axis, keep_dims=keepdims)
+
 _PLACEHOLDER_CACHE = {}  # name -> (placeholder, dtype, shape)
 def get_placeholder(name, dtype, shape):
     if name in _PLACEHOLDER_CACHE:
