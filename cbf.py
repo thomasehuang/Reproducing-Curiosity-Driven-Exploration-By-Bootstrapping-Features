@@ -48,21 +48,24 @@ if __name__ == '__main__':
     s = env.reset()
     s_arr = np.array(s)
 
-    a = env.action_space.sample()
-    s_,_,_,_ = env.step(a)
+    for _ in range(100):
+        a = env.action_space.sample()
+        s_,_,_,_ = env.step(a)
     s__arr = np.array(s_)
 
 
+    FD_LEARNING_RATE = 0.5
     with tf.Session() as sess:
-
-        emb = CnnEmbedding("embedding", env.observation_space, env.action_space)
-        policy = Policy("policy", env.action_space)
-        fd = ForwardDynamics("forward_dynamics", env.observation_space, env.action_space)
+        embedding_space_size = 512
+        emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
+        #policy = Policy("policy", env.observation_space, env.action_space, emb)
+        fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
 
         sess.run(tf.global_variables_initializer())
 
-        phi = emb.embed(s_arr)
-        probs, value = policy.act(phi[0])
-        fd.get_loss(s_arr, s__arr, np.eye(env.action_space.n)[a])
+        obs1 = emb.embed(s_arr)
+        obs2 = emb.embed(s__arr)
+        fd.get_loss(obs1, obs2, np.eye(env.action_space.n)[a])
+        fd.train(obs1, obs2, np.eye(env.action_space.n)[a], 0.5)
 
-
+        print(fd.get_trainable_variables())
