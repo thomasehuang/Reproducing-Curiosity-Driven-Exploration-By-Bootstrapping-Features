@@ -2,6 +2,7 @@
 import numpy as np
 import gym
 import tensorflow as tf
+import matplotlib.pyplot as plt
 from embedding import *
 from policy import *
 from forward_dynamics import *
@@ -56,8 +57,17 @@ def cbf(env,
     dones = np.zeros(len_rollouts, 'int32')
     a_arr = np.array([a for _ in range(len_rollouts)])
 
+    # For graphing
+    graph_rewards = []
+    best_reward = -21
+    cur_reward = 0
+
     for i in range(n_rollouts):
+        print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
+            if t % int(1e3) == 0:
+                print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+
             s = np.array(s)
             obs1 = emb.embed([s])
             a, vpred = policy.act(obs1)
@@ -69,7 +79,10 @@ def cbf(env,
             dones[idx] = done
             a_arr[idx] = a
 
-            s_ , _, done, _ = env.step(a) # ignoring reward from env
+            s_ , ext_r, done, _ = env.step(a)
+
+            cur_reward += ext_r
+            graph_rewards.append(best_reward)
 
             s_ = np.array(s_)
 
@@ -89,6 +102,9 @@ def cbf(env,
                 ep_lens.append(cur_ep_len)
                 cur_ep_ret = 0
                 cur_ep_len = 0
+                if cur_reward > best_reward:
+                    best_reward = cur_reward
+                cur_reward = 0
                 s = env.reset()
             else:
                 s = s_
@@ -106,8 +122,13 @@ def cbf(env,
             fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
+    plt.xlabel('Training frames')
+    plt.ylabel('Best return')
+    plt.plot(range(1, len(graph_rewards)+1), graph_rewards, 'b--')
+    plt.show()
 
-N_ROLLOUTS = 1
+
+N_ROLLOUTS = 1000
 LEN_ROLLOUTS = 64
 N_OPTIMIZATIONS = 10
 EMBEDDING_SPACE_SIZE = 512
