@@ -1,6 +1,7 @@
 import tensorflow as tf
 import gym
 import numpy as np
+import baselines.common.tf_util as U
 from models import conv2d, linear, normalized_columns_initializer, flatten
 from utils import get_placeholder
 
@@ -15,7 +16,8 @@ class CnnEmbedding(object):
 
         sequence_length = None
 
-        self.input = tf.placeholder(dtype=tf.float32, shape=[sequence_length] + list(ob_space.shape))
+        # self.input = tf.placeholder(dtype=tf.float32, shape=[sequence_length] + list(ob_space.shape))
+        self.input = U.get_placeholder(name="ob_f", dtype=tf.float32, shape=[None] + list(ob_space.shape))
         self.embedding_space = embedding_space_size
 
         x = self.input / 255.0
@@ -27,7 +29,7 @@ class CnnEmbedding(object):
 
     def embed(self, state):
         sess = tf.get_default_session()
-        return sess.run(self.x, {self.input: np.expand_dims(state, axis=0)})
+        return sess.run(self.x, {self.input: state})
     def get_input_and_last_layer(self):
         return [self.input, self.x]
     def get_variables(self):

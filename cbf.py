@@ -7,6 +7,7 @@ from policy import *
 from forward_dynamics import *
 
 from atari_wrappers import wrap_deepmind
+from ppo import PPO
 from replay_memory import ReplayMemory
 
 
@@ -17,53 +18,98 @@ def cbf(env,
         embedding_space_size,
         learning_rate,
         is_backprop_to_embedding=False):
-    # Init
+    # Initialize models
     emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
     fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
-    policy = Policy("policy", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    ppo = PPO(env, policy, policy_old,
+              max_timesteps=int(int(10e6) * 1.1),
+              timesteps_per_actorbatch=256,
+              clip_param=0.2, entcoeff=0.01,
+              optim_epochs=8, optim_stepsize=1e-3, optim_batchsize=64,
+              gamma=0.99, lam=0.95,
+              schedule='linear',
+              is_backprop_to_embedding=is_backprop_to_embedding,
+    )
+
     replay_memory = ReplayMemory(REPLAY_SIZE)
     sess = tf.get_default_session()
     sess.run(tf.global_variables_initializer())
 
-    s = env.reset()
     t = 0
+
+    # initialize optimization batch variables
+    a = env.action_space.sample() # not used, just so we have the datatype
+    done = True # marks if we're on first timestep of an episode
+    s = env.reset()
+
+    cur_ep_ret = 0 # return in current episode
+    cur_ep_len = 0 # len of current episode
+    ep_rets = [] # returns of completed episodes in this segment
+    ep_lens = [] # lengths of ...
+
+    # Initialize history arrays
+    s_arr = np.array([np.zeros(512) for _ in range(len_rollouts)])
+    r_arr = np.zeros(len_rollouts, 'float32')
+    vpreds = np.zeros(len_rollouts, 'float32')
+    dones = np.zeros(len_rollouts, 'int32')
+    a_arr = np.array([a for _ in range(len_rollouts)])
 
     for i in range(n_rollouts):
         for j in range(len_rollouts):
-
             s = np.array(s)
-            obs1 = emb.embed(s)
+            obs1 = emb.embed([s])
+            a, vpred = policy.act(obs1)
 
-            probs, val = policy.act(state=s, obs=obs1)
-            a = np.random.choice(env.action_space.n, p=probs)
+            # update optimization batch variables
+            idx = t % len_rollouts
+            s_arr[idx] = obs1
+            vpreds[idx] = vpred
+            dones[idx] = done
+            a_arr[idx] = a
+
             s_ , _, done, _ = env.step(a) # ignoring reward from env
 
             s_ = np.array(s_)
-            obs2 = emb.embed(s_)
 
             # compute intrinsic reward
+            obs2 = emb.embed([s_])
             r = fd.get_loss(obs1, obs2, np.eye(env.action_space.n)[a])
             replay_memory.add((s, a, r, s_))
 
+            # update optimization batch variables
+            r_arr[idx] = r
+            cur_ep_ret += r
+            cur_ep_len += 1
+
             # Prepare for next step
-            t += 1
             if done:
+                ep_rets.append(cur_ep_ret)
+                ep_lens.append(cur_ep_len)
+                cur_ep_ret = 0
+                cur_ep_len = 0
                 s = env.reset()
             else:
                 s = s_
+            t += 1
         for j in range(N_OPTIMIZATIONS):
             # optimize theta_pi (and optionally theta_phi) wrt PPO loss
-            states, actions, rewards, next_states = replay_memory.sample(BATCH_SIZE) # minibatch from replay memory
+            ppo.step({"ob" : s_arr, "rew" : r_arr, "vpred" : vpreds, "new" : dones,
+                      "ac" : a_arr, "nextvpred": vpred * (1 - done),
+                      "ep_rets" : ep_rets, "ep_lens" : ep_lens})
+            # sample minibatch M from replay buffer R
+            states, actions, rewards, next_states = replay_memory.sample(BATCH_SIZE)
+            obs1, obs2 = emb.embed(states), emb.embed(next_states) # embedding of states
+            actions = np.squeeze([np.eye(env.action_space.n)[action] for action in actions])
             # optimize theta_f wtf forward dynamics loss on minibatch
-            #fd.train(obs1, obs2, np.eye(env.action_space.n)[a], 0.5)
-            #policy.train()
-
+            fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
 
 N_ROLLOUTS = 1
-LEN_ROLLOUTS = 1
-N_OPTIMIZATIONS = 1
+LEN_ROLLOUTS = 64
+N_OPTIMIZATIONS = 10
 EMBEDDING_SPACE_SIZE = 512
 REPLAY_SIZE = 1000
 BATCH_SIZE = 128

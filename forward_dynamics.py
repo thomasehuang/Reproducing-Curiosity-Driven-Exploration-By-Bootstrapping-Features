@@ -46,6 +46,6 @@ class ForwardDynamics(object):
         sess = tf.get_default_session()
         sess.run(self.train_step, {self.phi1: phi1,
                                    self.phi2: phi2,
-                                   self.asample: [asample],
+                                   self.asample: asample,
                                    self.learning_rate: learning_rate})
 

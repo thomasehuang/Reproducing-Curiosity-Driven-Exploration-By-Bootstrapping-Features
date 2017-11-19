@@ -17,31 +17,29 @@ class Policy(object):
             self._init(ac_space, is_backprop_to_embedding, emb_space, emb)
 
     def _init(self, ac_space, is_backprop_to_embedding, emb_space=None, emb=None):
+        self.pdtype = pdtype = make_pdtype(ac_space)
 
-        self.is_backprop_to_embedding = is_backprop_to_embedding
-        if self.is_backprop_to_embedding:
+        # self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[sequence_length, 512])
+        if is_backprop_to_embedding:
             self.input, output = emb.get_input_and_last_layer()
             x = tf.nn.relu(linear(output, 128, 'lin1', normalized_columns_initializer(1.0)))
         else:
-            self.input = tf.placeholder(dtype=tf.float32, shape=[None, emb_space], name='input')
+            # self.input = tf.placeholder(dtype=tf.float32, shape=[None, emb_space], name='input')
+            self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, emb_space])
             x = tf.nn.relu(linear(self.input, 128, 'lin1', normalized_columns_initializer(1.0)))
 
         x = tf.nn.relu(linear(x, 32, 'lin2', normalized_columns_initializer(1.0)))
         logits = linear(x, ac_space.n, "logits", normalized_columns_initializer(0.01))
-        self.probs = tf.nn.softmax(logits, dim=-1)[0, :]
+        self.pd = pdtype.pdfromflat(logits)
+        self.ac = self.pd.sample()
+        # self.probs = tf.nn.softmax(logits, dim=-1)[0, :]
         self.vpred = linear(x, 1, "value", normalized_columns_initializer(1.0))
 
-    def act(self, state=None, obs=None):
-        if self.is_backprop_to_embedding:
-            input = state
-        else:
-            input = obs
+    def act(self, input):
         sess = tf.get_default_session()
-        return sess.run([self.probs, self.vpred], {self.input: input})
-
+        return sess.run([self.ac, self.vpred], {self.input: input})
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
-
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
