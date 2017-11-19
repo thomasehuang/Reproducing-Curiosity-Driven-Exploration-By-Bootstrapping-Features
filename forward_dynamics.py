@@ -33,7 +33,7 @@ class ForwardDynamics(object):
     def get_loss(self, phi1, phi2, asample):
         sess = tf.get_default_session()
         error = sess.run(self.forwardloss,
-                         {self.phi1: phi1, self.phi2: phi2, self.asample: [asample]})
+                         {self.phi1: phi1, self.phi2: phi2, self.asample: asample})
         return error
 
     def get_variables(self):

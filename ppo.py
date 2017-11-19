@@ -13,7 +13,7 @@ from policy import CnnPolicy
 import gym
 
 class PPO(object):
-    def __init__(self, env, policy,
+    def __init__(self, env, policy_new, policy_old,
                  timesteps_per_actorbatch, # timesteps per actor per update
                  clip_param, entcoeff, # clipping parameter epsilon, entropy coeff
                  optim_epochs, optim_stepsize, optim_batchsize,# optimization hypers
@@ -36,14 +36,15 @@ class PPO(object):
         # ----------------------------------------
         ob_space = env.observation_space
         ac_space = env.action_space
-        self.pi = policy("pi", ob_space, ac_space) # Construct network for new policy
-        oldpi = policy("oldpi", ob_space, ac_space) # Network for old policy
+        self.pi = policy_new # Construct network for new policy
+        oldpi = policy_old # Network for old policy
         atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
         ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
         lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
         clip_param = clip_param * lrmult # Annealed cliping parameter epislon
 
+        # ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None] + list(ob_space.shape))
         ob = U.get_placeholder_cached(name="ob")
         ac = self.pi.pdtype.sample_placeholder([None])
 
@@ -68,7 +69,7 @@ class PPO(object):
 
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(oldpi.get_variables(), self.pi.get_variables())])
-        # self.compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
+        self.compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
         U.initialize()
         self.adam.sync()
@@ -78,9 +79,6 @@ class PPO(object):
         episodes_so_far = 0
         self.timesteps_so_far = 0
         iters_so_far = 0
-        tstart = time.time()
-        lenbuffer = deque(maxlen=100) # rolling buffer for episode lengths
-        rewbuffer = deque(maxlen=100) # rolling buffer for episode rewards
 
     def step(self, batch):
         if self.schedule == 'constant':
@@ -110,7 +108,8 @@ class PPO(object):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
             for b in d.iterate_once(self.optim_batchsize):
                 *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                self.adam.update(g, self.optim_stepsize * cur_lrmult) 
+                self.adam.update(g, self.optim_stepsize * cur_lrmult)
+                # newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
                 losses.append(newlosses)
 
         # Compute timesteps update
@@ -133,14 +132,14 @@ class PPO(object):
         seg["tdlamret"] = seg["adv"] + seg["vpred"]
 
 
-if __name__ == '__main__':
-    with tf.Session() as sess:
-        env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
-        ppo = PPO(env, CnnPolicy,
-                  max_timesteps=int(int(10e6) * 1.1),
-                  timesteps_per_actorbatch=256,
-                  clip_param=0.2, entcoeff=0.01,
-                  optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
-                  gamma=0.99, lam=0.95,
-                  schedule='linear')
+# if __name__ == '__main__':
+#     with tf.Session() as sess:
+#         env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
+#         ppo = PPO(env, CnnPolicy,
+#                   max_timesteps=int(int(10e6) * 1.1),
+#                   timesteps_per_actorbatch=256,
+#                   clip_param=0.2, entcoeff=0.01,
+#                   optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
+#                   gamma=0.99, lam=0.95,
+#                   schedule='linear')
 
