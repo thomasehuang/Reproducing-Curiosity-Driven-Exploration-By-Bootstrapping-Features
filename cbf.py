@@ -12,7 +12,7 @@ from ppo import PPO
 from replay_memory import ReplayMemory
 
 
-def cbf(env,
+def cbf(env, sess,
         n_rollouts,
         len_rollouts,
         n_optimizations,
@@ -40,6 +40,8 @@ def cbf(env,
     sess = tf.get_default_session()
     sess.run(tf.global_variables_initializer())
 
+    saver = tf.train.Saver()
+
     t = 0
 
     # initialize optimization batch variables
@@ -62,8 +64,9 @@ def cbf(env,
     # For graphing
     best_reward = -21
     cur_reward = 0
-    graph_rewards = [(best_reward, 0)]
+    graph_rewards = []
     graph_epi_lens = []
+    graph_in_rewards = []
 
     for i in range(n_rollouts):
         print('# rollout: %i. timestep: %i' % (i,t,))
@@ -71,12 +74,18 @@ def cbf(env,
             if t > 0 and t % int(1e3) == 0:
                 print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
                 # update mean of episode lengths
-                with open('pong_frf_rewards.txt', 'w') as reward_file:
+                with open('results/pong_frf_rewards.txt', 'w') as reward_file:
                     for graph_reward, timestep in graph_rewards:
                         reward_file.write("%s %s\n" % (graph_reward,timestep))
-                with open('pong_frf_ep_len.txt', 'w') as ep_len_file:
+                with open('results/pong_frf_ep_len.txt', 'w') as ep_len_file:
                     for graph_epi_len, timestep in graph_epi_lens:
                         ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
+                with open('results/pong_frf_in_rewards.txt', 'w') as in_reward_file:
+                    for graph_in_reward, timestep in graph_in_rewards:
+                        in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
+
+                save_path = saver.save(sess, "model/model.ckpt")
+                print("Model saved in file: %s" % save_path)
 
             s = np.array(s)
             obs1 = emb.embed([s])
@@ -100,6 +109,8 @@ def cbf(env,
             obs2 = emb.embed([s_])
             r = fd.get_loss(obs1, obs2, np.eye(env.action_space.n)[a])
             replay_memory.add((s, a, r, s_))
+            if t > 0 and t % int(2e2) == 0:
+                graph_in_rewards.append((r, t))
 
             # update optimization batch variables
             r_arr[idx] = r
@@ -113,9 +124,10 @@ def cbf(env,
                 ep_lens.append(cur_ep_len)
                 cur_ep_ret = 0
                 cur_ep_len = 0
-                if cur_reward > best_reward:
-                    best_reward = cur_reward
-                    graph_rewards.append((best_reward, t))
+                # if cur_reward > best_reward:
+                #     best_reward = cur_reward
+                #     graph_rewards.append((best_reward, t))
+                graph_rewards.append((best_reward, t))
                 cur_reward = 0
                 s = env.reset()
             else:
@@ -134,12 +146,15 @@ def cbf(env,
             fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
-    with open('pong_frf_rewards.txt', 'w') as reward_file:
+    with open('results/pong_frf_rewards.txt', 'w') as reward_file:
         for graph_reward in graph_rewards:
             reward_file.write("%s\n" % graph_reward)
-    with open('pong_frf_ep_len.txt', 'w') as ep_len_file:
+    with open('results/pong_frf_ep_len.txt', 'w') as ep_len_file:
         for graph_epi_len, timestep in graph_epi_lens:
             ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
+    with open('results/pong_frf_in_rewards.txt', 'w') as in_reward_file:
+        for graph_in_reward, timestep in graph_in_rewards:
+            in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
 
 
 TIMESTEPS = int(1e6)
@@ -156,7 +171,7 @@ if __name__ == '__main__':
     with tf.Session() as sess:
         env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
         env.seed(42)
-        cbf(env,
+        cbf(env, sess,
             N_ROLLOUTS,
             LEN_ROLLOUTS,
             N_OPTIMIZATIONS,
