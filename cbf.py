@@ -28,7 +28,7 @@ def cbf(env,
               max_timesteps=int(int(10e6) * 1.1),
               timesteps_per_actorbatch=256,
               clip_param=0.2, entcoeff=0.01,
-              optim_epochs=8, optim_stepsize=1e-3, optim_batchsize=64,
+              optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
               gamma=0.99, lam=0.95,
               schedule='linear',
               is_backprop_to_embedding=is_backprop_to_embedding,
@@ -130,11 +130,11 @@ def cbf(env,
 
 N_ROLLOUTS = 1000
 LEN_ROLLOUTS = 64
-N_OPTIMIZATIONS = 10
+N_OPTIMIZATIONS = 8
 EMBEDDING_SPACE_SIZE = 512
 REPLAY_SIZE = 1000
 BATCH_SIZE = 128
-LEARNING_RATE = 0.5
+LEARNING_RATE = 1e-5
 IS_BACKPROP_TO_EMBEDDING = False
 
 if __name__ == '__main__':
