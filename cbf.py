@@ -108,6 +108,7 @@ def cbf(env,
 
             # Prepare for next step
             if done:
+                graph_epi_lens.append((cur_ep_len,t))
                 ep_rets.append(cur_ep_ret)
                 ep_lens.append(cur_ep_len)
                 cur_ep_ret = 0
@@ -116,7 +117,6 @@ def cbf(env,
                     best_reward = cur_reward
                     graph_rewards.append((best_reward, t))
                 cur_reward = 0
-                graph_epi_lens.append((np.mean(ep_lens),t))
                 s = env.reset()
             else:
                 s = s_
