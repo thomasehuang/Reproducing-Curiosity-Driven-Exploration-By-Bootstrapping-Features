@@ -2,7 +2,6 @@
 import numpy as np
 import gym
 import tensorflow as tf
-import matplotlib.pyplot as plt
 from embedding import *
 from policy import *
 from forward_dynamics import *
