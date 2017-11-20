@@ -24,6 +24,8 @@ def cbf(env,
     fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
     policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
     policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    # print(policy.get_trainable_variables())
+    # print(policy_old.get_trainable_variables())
     ppo = PPO(env, policy, policy_old,
               max_timesteps=int(int(10e6) * 1.1),
               timesteps_per_actorbatch=256,
@@ -67,6 +69,9 @@ def cbf(env,
         for j in range(len_rollouts):
             if t % int(1e3) == 0:
                 print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+                with open('pong_frf_rewards.txt', 'w') as reward_file:
+                    for graph_reward in graph_rewards:
+                        reward_file.write("%s\n" % graph_reward)
 
             s = np.array(s)
             obs1 = emb.embed([s])
@@ -122,14 +127,19 @@ def cbf(env,
             fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
-    plt.xlabel('Training frames')
-    plt.ylabel('Best return')
-    plt.plot(range(1, len(graph_rewards)+1), graph_rewards, 'b--')
-    plt.show()
+    with open('pong_frf_rewards.txt', 'w') as reward_file:
+        for graph_reward in graph_rewards:
+            reward_file.write("%s\n" % graph_reward)
+
+    # plt.xlabel('Training frames')
+    # plt.ylabel('Best return')
+    # plt.plot(range(1, len(graph_rewards)+1), graph_rewards, 'b--')
+    # plt.show()
 
 
-N_ROLLOUTS = 1000
+TIMESTEPS = int(1e6)
 LEN_ROLLOUTS = 64
+N_ROLLOUTS = TIMESTEPS // LEN_ROLLOUTS
 N_OPTIMIZATIONS = 8
 EMBEDDING_SPACE_SIZE = 512
 REPLAY_SIZE = 1000

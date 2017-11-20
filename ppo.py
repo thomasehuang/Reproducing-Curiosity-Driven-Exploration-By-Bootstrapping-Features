@@ -9,7 +9,6 @@ from mpi4py import MPI
 from collections import deque
 
 from atari_wrappers import wrap_deepmind
-from policy import CnnPolicy
 import gym
 
 class PPO(object):
