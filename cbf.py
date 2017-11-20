@@ -60,18 +60,23 @@ def cbf(env,
     a_arr = np.array([a for _ in range(len_rollouts)])
 
     # For graphing
-    graph_rewards = []
     best_reward = -21
     cur_reward = 0
+    graph_rewards = [(best_reward, 0)]
+    graph_epi_lens = []
 
     for i in range(n_rollouts):
         print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
-            if t % int(1e3) == 0:
+            if t > 0 and t % int(1e3) == 0:
                 print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+                # update mean of episode lengths
                 with open('pong_frf_rewards.txt', 'w') as reward_file:
-                    for graph_reward in graph_rewards:
-                        reward_file.write("%s\n" % graph_reward)
+                    for graph_reward, timestep in graph_rewards:
+                        reward_file.write("%s %s\n" % (graph_reward,timestep))
+                with open('pong_frf_ep_len.txt', 'w') as ep_len_file:
+                    for graph_epi_len, timestep in graph_epi_lens:
+                        ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
 
             s = np.array(s)
             obs1 = emb.embed([s])
@@ -87,7 +92,7 @@ def cbf(env,
             s_ , ext_r, done, _ = env.step(a)
 
             cur_reward += ext_r
-            graph_rewards.append(best_reward)
+            # graph_rewards.append(best_reward)
 
             s_ = np.array(s_)
 
@@ -109,7 +114,9 @@ def cbf(env,
                 cur_ep_len = 0
                 if cur_reward > best_reward:
                     best_reward = cur_reward
+                    graph_rewards.append((best_reward, t))
                 cur_reward = 0
+                graph_epi_lens.append((np.mean(ep_lens),t))
                 s = env.reset()
             else:
                 s = s_
@@ -130,11 +137,9 @@ def cbf(env,
     with open('pong_frf_rewards.txt', 'w') as reward_file:
         for graph_reward in graph_rewards:
             reward_file.write("%s\n" % graph_reward)
-
-    # plt.xlabel('Training frames')
-    # plt.ylabel('Best return')
-    # plt.plot(range(1, len(graph_rewards)+1), graph_rewards, 'b--')
-    # plt.show()
+    with open('pong_frf_ep_len.txt', 'w') as ep_len_file:
+        for graph_epi_len, timestep in graph_epi_lens:
+            ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
 
 
 TIMESTEPS = int(1e6)
