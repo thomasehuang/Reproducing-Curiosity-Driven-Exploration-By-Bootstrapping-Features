@@ -1,5 +1,3 @@
-# TODO integrate PPO
-import numpy as np
 import gym
 import tensorflow as tf
 from embedding import *
@@ -68,7 +66,7 @@ def cbf(env, sess,
     graph_in_rewards = []
 
     for i in range(n_rollouts):
-        print('# rollout: %i. timestep: %i' % (i,t,))
+        #print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
             if t > 0 and t % int(1e3) == 0:
                 print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
@@ -84,7 +82,7 @@ def cbf(env, sess,
                         in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
 
                 save_path = saver.save(sess, "model/model.ckpt")
-                print("Model saved in file: %s" % save_path)
+                #print("Model saved in file: %s" % save_path)
 
             s = np.array(s)
             obs1 = emb.embed([s])
@@ -156,7 +154,7 @@ def cbf(env, sess,
             in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
 
 
-TIMESTEPS = int(1e6)
+TIMESTEPS = int(2e6)
 LEN_ROLLOUTS = 64
 N_ROLLOUTS = TIMESTEPS // LEN_ROLLOUTS
 N_OPTIMIZATIONS = 8

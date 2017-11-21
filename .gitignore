@@ -2,3 +2,7 @@
 .idea/
 env/
 .DS_Store
+results/
+model/
+*.tar.gz
+scripts/src/
