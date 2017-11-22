@@ -1,3 +1,5 @@
+import os
+import datetime
 import gym
 import tensorflow as tf
 from embedding import *
@@ -65,21 +67,29 @@ def cbf(env, sess,
     graph_epi_lens = []
     graph_in_rewards = []
 
+    cur_time = datetime.datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
+    directory = 'results/' + cur_time
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     for i in range(n_rollouts):
-        #print('# rollout: %i. timestep: %i' % (i,t,))
+        # print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
             if t > 0 and t % int(1e3) == 0:
-                print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+                # print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
                 # update mean of episode lengths
-                with open('results/pong_frf_rewards.txt', 'w') as reward_file:
+                with open(directory + '/pong_frf_rewards.txt', 'a+') as reward_file:
                     for graph_reward, timestep in graph_rewards:
                         reward_file.write("%s %s\n" % (graph_reward,timestep))
-                with open('results/pong_frf_ep_len.txt', 'w') as ep_len_file:
+                    graph_rewards = []
+                with open(directory + '/pong_frf_ep_len.txt', 'a+') as ep_len_file:
                     for graph_epi_len, timestep in graph_epi_lens:
                         ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
-                with open('results/pong_frf_in_rewards.txt', 'w') as in_reward_file:
+                    graph_epi_lens = []
+                with open(directory + '/pong_frf_in_rewards.txt', 'a+') as in_reward_file:
                     for graph_in_reward, timestep in graph_in_rewards:
                         in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
+                    graph_in_rewards = []
 
                 save_path = saver.save(sess, "model/model.ckpt")
                 #print("Model saved in file: %s" % save_path)
@@ -143,18 +153,21 @@ def cbf(env, sess,
             fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
-    with open('results/pong_frf_rewards.txt', 'w') as reward_file:
-        for graph_reward in graph_rewards:
-            reward_file.write("%s\n" % graph_reward)
-    with open('results/pong_frf_ep_len.txt', 'w') as ep_len_file:
+    with open(directory + '/pong_frf_rewards.txt', 'a+') as reward_file:
+        for graph_reward, timestep in graph_rewards:
+            reward_file.write("%s %s\n" % (graph_reward,timestep))
+        graph_rewards = []
+    with open(directory + '/pong_frf_ep_len.txt', 'a+') as ep_len_file:
         for graph_epi_len, timestep in graph_epi_lens:
             ep_len_file.write("%s %s\n" % (graph_epi_len,timestep))
-    with open('results/pong_frf_in_rewards.txt', 'w') as in_reward_file:
+        graph_epi_lens = []
+    with open(directory + '/pong_frf_in_rewards.txt', 'a+') as in_reward_file:
         for graph_in_reward, timestep in graph_in_rewards:
             in_reward_file.write("%s %s\n" % (graph_in_reward,timestep))
+        graph_in_rewards = []
 
 
-TIMESTEPS = int(2e6)
+TIMESTEPS = int(3e3)
 LEN_ROLLOUTS = 64
 N_ROLLOUTS = TIMESTEPS // LEN_ROLLOUTS
 N_OPTIMIZATIONS = 8
