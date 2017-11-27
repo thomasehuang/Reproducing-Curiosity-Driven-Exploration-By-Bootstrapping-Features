@@ -42,8 +42,8 @@ class Policy(object):
         return sess.run([self.ac, self.vpred], {self.input: input})
     def get_variables(self):
         if self.is_backprop_to_embedding:
-            return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope).extend(
-                   tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.emb.scope))
+            return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope) + \
+                   tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.emb.scope)
         else:
             return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
     def get_trainable_variables(self):

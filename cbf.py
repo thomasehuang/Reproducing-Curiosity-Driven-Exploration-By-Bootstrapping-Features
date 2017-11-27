@@ -23,8 +23,6 @@ def cbf(env, sess,
     fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space)
     policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
     policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
-    # print(policy.get_trainable_variables())
-    # print(policy_old.get_trainable_variables())
     ppo = PPO(env, policy, policy_old,
               max_timesteps=int(int(10e6) * 1.1),
               timesteps_per_actorbatch=256,
@@ -54,7 +52,10 @@ def cbf(env, sess,
     ep_lens = [] # lengths of ...
 
     # Initialize history arrays
-    s_arr = np.array([np.zeros(512) for _ in range(len_rollouts)])
+    if is_backprop_to_embedding:
+        s_arr = np.array([np.zeros([84,84,4]) for _ in range(len_rollouts)])
+    else:
+        s_arr = np.array([np.zeros(512) for _ in range(len_rollouts)])
     r_arr = np.zeros(len_rollouts, 'float32')
     vpreds = np.zeros(len_rollouts, 'float32')
     dones = np.zeros(len_rollouts, 'int32')
@@ -73,10 +74,10 @@ def cbf(env, sess,
         os.makedirs(directory)
 
     for i in range(n_rollouts):
-        # print('# rollout: %i. timestep: %i' % (i,t,))
+        print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
             if t > 0 and t % int(1e3) == 0:
-                # print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+                print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
                 # update mean of episode lengths
                 with open(directory + '/pong_frf_rewards.txt', 'a+') as reward_file:
                     for graph_reward, timestep in graph_rewards:
@@ -96,11 +97,17 @@ def cbf(env, sess,
 
             s = np.array(s)
             obs1 = emb.embed([s])
-            a, vpred = policy.act(obs1)
+            if is_backprop_to_embedding:
+                a, vpred = policy.act([s])
+            else:
+                a, vpred = policy.act(obs1)
 
             # update optimization batch variables
             idx = t % len_rollouts
-            s_arr[idx] = obs1
+            if is_backprop_to_embedding:
+                s_arr[idx] = s
+            else:
+                s_arr[idx] = obs1
             vpreds[idx] = vpred
             dones[idx] = done
             a_arr[idx] = a
