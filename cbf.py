@@ -82,7 +82,7 @@ def cbf(env, sess,
     if is_backprop_to_embedding:
         s_arr = np.array([np.zeros([84,84,4]) for _ in range(len_rollouts)])
     else:
-        s_arr = np.array([np.zeros(512) for _ in range(len_rollouts)])
+        s_arr = np.array([np.zeros(embedding_space_size) for _ in range(len_rollouts)])
     r_arr = np.zeros(len_rollouts, 'float32')
     vpreds = np.zeros(len_rollouts, 'float32')
     dones = np.zeros(len_rollouts, 'int32')
