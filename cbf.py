@@ -89,7 +89,7 @@ def cbf(env, sess,
     a_arr = np.array([a for _ in range(len_rollouts)])
 
     # For graphing
-    best_reward = -21
+    best_reward = -float("inf")
     cur_reward = 0
     graph_rewards = []
     graph_epi_lens = []
@@ -154,6 +154,8 @@ def cbf(env, sess,
                 ep_lens.append(cur_ep_len)
                 cur_ep_ret = 0
                 cur_ep_len = 0
+                if cur_reward > best_reward:
+                    best_reward = cur_reward
                 graph_rewards.append((best_reward, t))
                 cur_reward = 0
                 s = env.reset()
