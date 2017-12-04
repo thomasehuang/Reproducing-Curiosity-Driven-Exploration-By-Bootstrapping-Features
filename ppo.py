@@ -30,6 +30,7 @@ class PPO(object):
         self.gamma = gamma
         self.lam = lam
         self.max_timesteps = max_timesteps
+        self.adam_epsilon = adam_epsilon
         self.schedule = schedule
 
         # Setup losses and stuff
@@ -62,12 +63,12 @@ class PPO(object):
         surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
         pol_surr = - U.mean(tf.minimum(surr1, surr2)) # PPO's pessimistic surrogate (L^CLIP)
         vf_loss = U.mean(tf.square(self.pi.vpred - ret))
-        total_loss = pol_surr + pol_entpen + vf_loss
+        self.total_loss = pol_surr + pol_entpen + vf_loss
         losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
         loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
 
         var_list = self.pi.get_trainable_variables()
-        self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
+        self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(self.total_loss, var_list)])
         self.adam = MpiAdam(var_list, epsilon=adam_epsilon)
 
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
@@ -82,6 +83,9 @@ class PPO(object):
         episodes_so_far = 0
         self.timesteps_so_far = 0
         iters_so_far = 0
+
+        self.train_step = tf.train.AdamOptimizer(adam_epsilon).minimize(self.total_loss, var_list=var_list)
+        self.train = U.function([ob, ac, atarg, ret, lrmult], self.train_step)
 
     def step(self, batch):
         if self.schedule == 'constant':
@@ -107,13 +111,15 @@ class PPO(object):
 
         self.assign_old_eq_new() # set old parameter values to new parameter values
         # Here we do a bunch of optimization epochs over the data
-        for _ in range(self.optim_epochs):
-            losses = [] # list of tuples, each of which gives the loss for a minibatch
-            for b in d.iterate_once(self.optim_batchsize):
-                *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                self.adam.update(g, self.optim_stepsize * cur_lrmult)
-                # newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                losses.append(newlosses)
+        # for _ in range(self.optim_epochs):
+        # losses = [] # list of tuples, each of which gives the loss for a minibatch
+        for b in d.iterate_once(self.optim_batchsize):
+            self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+            # *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+            # self.adam.update(g, self.optim_stepsize * cur_lrmult)
+        # newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+        # losses.append(newlosses)
+        # print(losses)
 
         # Compute timesteps update
         self.timesteps_so_far += sum(seg["ep_lens"])
@@ -133,16 +139,3 @@ class PPO(object):
             delta = rew[t] + gamma * vpred[t+1] * nonterminal - vpred[t]
             gaelam[t] = lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
         seg["tdlamret"] = seg["adv"] + seg["vpred"]
-
-
-# if __name__ == '__main__':
-#     with tf.Session() as sess:
-#         env = wrap_deepmind(gym.make('Pong-v0'), episode_life=False, clip_rewards=False, frame_stack=True)
-#         ppo = PPO(env, CnnPolicy,
-#                   max_timesteps=int(int(10e6) * 1.1),
-#                   timesteps_per_actorbatch=256,
-#                   clip_param=0.2, entcoeff=0.01,
-#                   optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
-#                   gamma=0.99, lam=0.95,
-#                   schedule='linear')
-

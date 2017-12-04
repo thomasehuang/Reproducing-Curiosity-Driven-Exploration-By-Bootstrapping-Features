@@ -49,7 +49,7 @@ def cbf(env, sess,
     policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
     policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
     ppo = PPO(env, policy, policy_old,
-              max_timesteps=int(int(10e6) * 1.1),
+              max_timesteps=int(n_timesteps * 1.1),
               timesteps_per_actorbatch=256,
               clip_param=0.2, entcoeff=0.01,
               optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
@@ -101,10 +101,10 @@ def cbf(env, sess,
         os.makedirs(directory)
 
     for i in range(n_rollouts):
-        print('# rollout: %i. timestep: %i' % (i,t,))
+        # print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
             if t > 0 and t % int(1e3) == 0:
-                print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
+                # print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
                 save_to_file(directory, graph_rewards, graph_epi_lens, graph_in_rewards)
 
                 save_path = saver.save(sess, "model/model.ckpt")
@@ -188,8 +188,8 @@ def main():
             n_timesteps=args.num_timesteps,
             len_rollouts=64,
             n_optimizations=8,
-            embedding_space_size=512,
-            learning_rate=1e-5,
+            embedding_space_size=288,
+            learning_rate=1e-3,
             is_backprop_to_embedding=args.backprop_to_embedding
             )
 
