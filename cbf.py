@@ -133,7 +133,7 @@ def cbf(env, sess, env_name,
     ep_lens = [] # lengths of ...
 
     # Initialize history arrays
-    if is_backprop_to_embedding or using_raw_input:
+    if is_backprop_to_embedding:
         s_arr = np.array([np.zeros([84,84,4]) for _ in range(len_rollouts)])
     else:
         s_arr = np.array([np.zeros(embedding_space_size) for _ in range(len_rollouts)])
@@ -236,7 +236,7 @@ def cbf(env, sess, env_name,
             obs1, obs2 = emb.embed(states), emb.embed(next_states) # embedding of states
             actions = np.squeeze([np.eye(env.action_space.n)[action] for action in actions])
             # optimize theta_f wtf forward dynamics loss on minibatch
-            if using_extrinsic_reward: fd.train(obs1, obs2, actions, learning_rate)
+            if not using_extrinsic_reward: fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
 
     save_to_file(directory, env_name, graph_rewards, graph_epi_lens, graph_in_rewards)
