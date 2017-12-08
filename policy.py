@@ -30,7 +30,7 @@ class Policy(object):
             self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, emb_space])
             x = tf.nn.relu(linear(self.input, 128, 'lin1', normalized_columns_initializer(1.0)))
 
-        x = tf.nn.relu(linear(x, 32, 'lin2', normalized_columns_initializer(1.0)))
+        # x = tf.nn.relu(linear(x, 32, 'lin2', normalized_columns_initializer(1.0)))
         logits = linear(x, ac_space.n, "logits", normalized_columns_initializer(0.01))
         self.pd = pdtype.pdfromflat(logits)
         self.ac = self.pd.sample()

@@ -20,7 +20,7 @@ class PPO(object):
                  max_timesteps=0, max_episodes=0, max_iters=0, max_seconds=0,  # time constraint
                  adam_epsilon=1e-5,
                  schedule='constant',
-                 is_backprop_to_embedding=False,
+                 is_backprop_to_embedding=False
                  ):
         # Setup variables
         self.timesteps_per_actorbatch = timesteps_per_actorbatch
@@ -65,7 +65,7 @@ class PPO(object):
         vf_loss = U.mean(tf.square(self.pi.vpred - ret))
         self.total_loss = pol_surr + pol_entpen + vf_loss
         losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
-        loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
+        self.loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
 
         var_list = self.pi.get_trainable_variables()
         self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(self.total_loss, var_list)])
@@ -80,12 +80,15 @@ class PPO(object):
 
         # Prepare for rollouts
         # ----------------------------------------
-        episodes_so_far = 0
+        self.episodes_so_far = 0
         self.timesteps_so_far = 0
-        iters_so_far = 0
+        self.iters_so_far = 0
+        self.tstart = time.time()
+        self.lenbuffer = deque(maxlen=100) # rolling buffer for episode lengths
+        self.rewbuffer = deque(maxlen=100) # rolling buffer for episode rewards
 
-        self.train_step = tf.train.AdamOptimizer(adam_epsilon).minimize(self.total_loss, var_list=var_list)
-        self.train = U.function([ob, ac, atarg, ret, lrmult], self.train_step)
+        # self.train_step = tf.train.AdamOptimizer(adam_epsilon).minimize(self.total_loss, var_list=var_list)
+        # self.train = U.function([ob, ac, atarg, ret, lrmult], self.train_step)
 
     def step(self, batch):
         if self.schedule == 'constant':
@@ -94,6 +97,8 @@ class PPO(object):
             cur_lrmult =  max(1.0 - float(self.timesteps_so_far) / self.max_timesteps, 0)
         else:
             raise NotImplementedError
+
+        logger.log("********** Iteration %i ************"%self.iters_so_far)
 
         # seg = seg_gen.__next__() # generate next sequence
         seg = batch
@@ -111,18 +116,44 @@ class PPO(object):
 
         self.assign_old_eq_new() # set old parameter values to new parameter values
         # Here we do a bunch of optimization epochs over the data
-        # for _ in range(self.optim_epochs):
-        # losses = [] # list of tuples, each of which gives the loss for a minibatch
-        for b in d.iterate_once(self.optim_batchsize):
-            self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-            # *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-            # self.adam.update(g, self.optim_stepsize * cur_lrmult)
-        # newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-        # losses.append(newlosses)
-        # print(losses)
+        for _ in range(self.optim_epochs):
+            losses = [] # list of tuples, each of which gives the loss for a minibatch
+            for b in d.iterate_once(self.optim_batchsize):
+                # self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+                *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+                self.adam.update(g, self.optim_stepsize * cur_lrmult)
+                losses.append(newlosses)
+            logger.log(fmt_row(13, np.mean(losses, axis=0)))
 
-        # Compute timesteps update
-        self.timesteps_so_far += sum(seg["ep_lens"])
+        logger.log("Evaluating losses...")
+        losses = []
+        for b in d.iterate_once(self.optim_batchsize):
+            newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+            losses.append(newlosses)            
+        meanlosses,_,_ = mpi_moments(losses, axis=0)
+        logger.log(fmt_row(13, meanlosses))
+        for (lossval, name) in zipsame(meanlosses, self.loss_names):
+            logger.record_tabular("loss_"+name, lossval)
+        logger.record_tabular("ev_tdlam_before", explained_variance(vpredbefore, tdlamret))
+        lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
+        listoflrpairs = MPI.COMM_WORLD.allgather(lrlocal) # list of tuples
+        lens, rews = map(self.flatten_lists, zip(*listoflrpairs))
+        self.lenbuffer.extend(lens)
+        self.rewbuffer.extend(rews)
+        logger.record_tabular("EpLenMean", np.mean(self.lenbuffer))
+        logger.record_tabular("EpRewMean", np.mean(self.rewbuffer))
+        logger.record_tabular("EpThisIter", len(lens))
+        self.episodes_so_far += len(lens)
+        self.timesteps_so_far += sum(lens)
+        self.iters_so_far += 1
+        logger.record_tabular("EpisodesSoFar", self.episodes_so_far)
+        logger.record_tabular("TimestepsSoFar", self.timesteps_so_far)
+        logger.record_tabular("TimeElapsed", time.time() - self.tstart)
+        if MPI.COMM_WORLD.Get_rank()==0:
+            logger.dump_tabular()
+
+        # # Compute timesteps update
+        # self.timesteps_so_far += sum(seg["ep_lens"])
 
     def add_vtarg_and_adv(self, seg, gamma, lam):
         """
@@ -139,3 +170,6 @@ class PPO(object):
             delta = rew[t] + gamma * vpred[t+1] * nonterminal - vpred[t]
             gaelam[t] = lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
         seg["tdlamret"] = seg["adv"] + seg["vpred"]
+
+    def flatten_lists(self, listoflists):
+        return [el for list_ in listoflists for el in list_]
