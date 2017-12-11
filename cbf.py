@@ -105,8 +105,8 @@ def cbf(env, sess, env_name,
     ppo = PPO(env, policy, policy_old,
               max_timesteps=int(n_timesteps * 1.1),
               timesteps_per_actorbatch=256,
-              clip_param=0.2, entcoeff=0.01,
-              optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64,
+              clip_param=0.2, entcoeff=0.001,
+              optim_epochs=8, optim_stepsize=1e-3, optim_batchsize=64,
               gamma=0.99, lam=0.95,
               schedule='linear',
               is_backprop_to_embedding=is_backprop_to_embedding,
@@ -161,7 +161,7 @@ def cbf(env, sess, env_name,
         os.makedirs(directory_m)
 
     for i in range(n_rollouts):
-        # print('# rollout: %i. timestep: %i' % (i,t,))
+        print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
             if t > 0 and t % int(1e3) == 0:
                 # print('# frame: %i. Best reward so far: %i.' % (t, best_reward,))
@@ -226,11 +226,12 @@ def cbf(env, sess, env_name,
             else:
                 s = s_
             t += 1
+        ppo.prepare({"ob" : s_arr, "rew" : r_arr, "vpred" : vpreds, "new" : dones,
+                     "ac" : a_arr, "nextvpred": vpred * (1 - done),
+                     "ep_rets" : ep_rets, "ep_lens" : ep_lens})
         for j in range(n_optimizations):
             # optimize theta_pi (and optionally theta_phi) wrt PPO loss
-            ppo.step({"ob" : s_arr, "rew" : r_arr, "vpred" : vpreds, "new" : dones,
-                      "ac" : a_arr, "nextvpred": vpred * (1 - done),
-                      "ep_rets" : ep_rets, "ep_lens" : ep_lens})
+            ppo.step()
             # sample minibatch M from replay buffer R
             states, actions, rewards, next_states = replay_memory.sample(batch_size)
             obs1, obs2 = emb.embed(states), emb.embed(next_states) # embedding of states
@@ -238,8 +239,9 @@ def cbf(env, sess, env_name,
             # optimize theta_f wtf forward dynamics loss on minibatch
             if not using_extrinsic_reward: fd.train(obs1, obs2, actions, learning_rate)
             # optionally optimize theta_phi, theta_A wrt to auxilary loss
+        ppo.log()
 
-    save_to_file(directory, env_name, graph_rewards, graph_epi_lens, graph_in_rewards)
+    save_to_file(directory, env_name, graph_rewards, graph_epi_lens, graph_in_rewards, graph_avg_rewards)
 
 
 def main():
@@ -251,7 +253,7 @@ def main():
         if args.inference:
             inference(env, sess, args.env,
                       path_to_model=args.path_to_model,
-                      embedding_space_size=288,
+                      embedding_space_size=256,
                       is_backprop_to_embedding=args.backprop_to_embedding,
                       using_extrinsic_reward=args.using_extrinsic_reward,
                      )
@@ -262,7 +264,7 @@ def main():
                 n_timesteps=args.num_timesteps,
                 len_rollouts=64,
                 n_optimizations=4,
-                embedding_space_size=288,
+                embedding_space_size=256,
                 learning_rate=1e-5,
                 is_backprop_to_embedding=args.backprop_to_embedding,
                 using_extrinsic_reward=args.using_extrinsic_reward,

@@ -90,52 +90,55 @@ class PPO(object):
         # self.train_step = tf.train.AdamOptimizer(adam_epsilon).minimize(self.total_loss, var_list=var_list)
         # self.train = U.function([ob, ac, atarg, ret, lrmult], self.train_step)
 
-    def step(self, batch):
+
+    def prepare(self, batch):
         if self.schedule == 'constant':
-            cur_lrmult = 1.0
+            self.cur_lrmult = 1.0
         elif self.schedule == 'linear':
-            cur_lrmult =  max(1.0 - float(self.timesteps_so_far) / self.max_timesteps, 0)
+            self.cur_lrmult =  max(1.0 - float(self.timesteps_so_far) / self.max_timesteps, 0)
         else:
             raise NotImplementedError
 
         logger.log("********** Iteration %i ************"%self.iters_so_far)
 
         # seg = seg_gen.__next__() # generate next sequence
-        seg = batch
-        self.add_vtarg_and_adv(seg, self.gamma, self.lam)
+        self.seg = batch
+        self.add_vtarg_and_adv(self.seg, self.gamma, self.lam)
 
         # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
-        ob, ac, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
-        vpredbefore = seg["vpred"] # predicted value function before udpate
+        ob, ac, atarg, self.tdlamret = self.seg["ob"], self.seg["ac"], self.seg["adv"], self.seg["tdlamret"]
+        self.vpredbefore = self.seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
-        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not self.pi.recurrent)
+        self.d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=self.tdlamret), shuffle=not self.pi.recurrent)
         self.optim_batchsize = self.optim_batchsize or ob.shape[0]
 
-        # NOTE: won't run since CNN policy doesn't have this attribute
-        if hasattr(self.pi, "ob_rms"): self.pi.ob_rms.update(ob) # update running mean/std for policy
-
         self.assign_old_eq_new() # set old parameter values to new parameter values
+
+
+    def step(self):
         # Here we do a bunch of optimization epochs over the data
         for _ in range(self.optim_epochs):
             losses = [] # list of tuples, each of which gives the loss for a minibatch
-            for b in d.iterate_once(self.optim_batchsize):
-                # self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
-                self.adam.update(g, self.optim_stepsize * cur_lrmult)
-                losses.append(newlosses)
-            logger.log(fmt_row(13, np.mean(losses, axis=0)))
+            for b in self.d.iterate_once(self.optim_batchsize):
+                # self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], self.cur_lrmult)
+                *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], self.cur_lrmult)
+                self.adam.update(g, self.optim_stepsize * self.cur_lrmult)
+                # losses.append(newlosses)
+            # logger.log(fmt_row(13, np.mean(losses, axis=0)))
 
+    
+    def log(self):
         logger.log("Evaluating losses...")
         losses = []
-        for b in d.iterate_once(self.optim_batchsize):
-            newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], cur_lrmult)
+        for b in self.d.iterate_once(self.optim_batchsize):
+            newlosses = self.compute_losses(b["ob"], b["ac"], b["atarg"], b["vtarg"], self.cur_lrmult)
             losses.append(newlosses)            
         meanlosses,_,_ = mpi_moments(losses, axis=0)
         logger.log(fmt_row(13, meanlosses))
         for (lossval, name) in zipsame(meanlosses, self.loss_names):
             logger.record_tabular("loss_"+name, lossval)
-        logger.record_tabular("ev_tdlam_before", explained_variance(vpredbefore, tdlamret))
-        lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
+        logger.record_tabular("ev_tdlam_before", explained_variance(self.vpredbefore, self.tdlamret))
+        lrlocal = (self.seg["ep_lens"], self.seg["ep_rets"]) # local values
         listoflrpairs = MPI.COMM_WORLD.allgather(lrlocal) # list of tuples
         lens, rews = map(self.flatten_lists, zip(*listoflrpairs))
         self.lenbuffer.extend(lens)
@@ -151,9 +154,6 @@ class PPO(object):
         logger.record_tabular("TimeElapsed", time.time() - self.tstart)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
-
-        # # Compute timesteps update
-        # self.timesteps_so_far += sum(seg["ep_lens"])
 
     def add_vtarg_and_adv(self, seg, gamma, lam):
         """

@@ -22,13 +22,14 @@ class Policy(object):
         # self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[sequence_length, 512])
         self.emb = emb
         self.is_backprop_to_embedding = is_backprop_to_embedding
+        size = 128
         if self.is_backprop_to_embedding:
             self.input, output = emb.get_input_and_last_layer()
-            x = tf.nn.relu(linear(output, 128, 'lin1', normalized_columns_initializer(1.0)))
+            x = tf.nn.relu(linear(output, size, 'lin1', normalized_columns_initializer(1.0)))
         else:
             # self.input = tf.placeholder(dtype=tf.float32, shape=[None, emb_space], name='input')
             self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, emb_space])
-            x = tf.nn.relu(linear(self.input, 128, 'lin1', normalized_columns_initializer(1.0)))
+            x = tf.nn.relu(linear(self.input, size, 'lin1', normalized_columns_initializer(1.0)))
 
         # x = tf.nn.relu(linear(x, 32, 'lin2', normalized_columns_initializer(1.0)))
         logits = linear(x, ac_space.n, "logits", normalized_columns_initializer(0.01))

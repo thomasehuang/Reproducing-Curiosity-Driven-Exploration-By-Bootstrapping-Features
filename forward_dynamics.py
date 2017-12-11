@@ -25,7 +25,7 @@ class ForwardDynamics(object):
         f = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
         f = linear(f, self.phi1.get_shape()[1].value, "flast", normalized_columns_initializer(0.01))
         self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f, self.phi2)), name='forwardloss')
-        self.forwardloss = self.forwardloss * 288.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
+        self.forwardloss = self.forwardloss / 288.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
 
         self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.forwardloss, var_list=self.get_trainable_variables())
 
@@ -34,17 +34,13 @@ class ForwardDynamics(object):
         error = sess.run(self.forwardloss,
                          {self.phi1: phi1, self.phi2: phi2, self.asample: asample})
         return error
-
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
-
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
-
     def train(self, phi1, phi2, asample, learning_rate):
         sess = tf.get_default_session()
         sess.run(self.train_step, {self.phi1: phi1,
                                    self.phi2: phi2,
                                    self.asample: asample,
                                    self.learning_rate: learning_rate})
-
