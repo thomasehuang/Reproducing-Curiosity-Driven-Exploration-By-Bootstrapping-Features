@@ -20,7 +20,7 @@ class PPO(object):
                  max_timesteps=0, max_episodes=0, max_iters=0, max_seconds=0,  # time constraint
                  adam_epsilon=1e-5,
                  schedule='constant',
-                 is_backprop_to_embedding=False
+                 joint_training=False
                  ):
         # Setup variables
         self.timesteps_per_actorbatch = timesteps_per_actorbatch
@@ -46,7 +46,7 @@ class PPO(object):
         clip_param = clip_param * lrmult # Annealed cliping parameter epislon
 
         # ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None] + list(ob_space.shape))
-        if is_backprop_to_embedding:
+        if joint_training:
             ob = U.get_placeholder_cached(name="ob_f")
         else:
             ob = U.get_placeholder_cached(name="ob")

@@ -7,7 +7,7 @@ from embedding import *
 from policy import *
 from forward_dynamics import *
 
-from atari_wrappers import wrap_deepmind
+from atari_wrappers import wrap_deepmind, make_atari
 from ppo import PPO
 from replay_memory import ReplayMemory
 
@@ -22,45 +22,49 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--env', help='gym environment ID', default='Pong-v0')
+parser.add_argument('--env', help='gym environment ID', default='PongNoFrameskip-v4')
 parser.add_argument('--seed', help='seed for environment', type=int, default=0)
 parser.add_argument('--num-timesteps', help='number of timesteps', type=int, default=int(1e5))
-parser.add_argument('--path-to-model', help='path to model', default='model/model.ckpt')
-parser.add_argument('--inference', help='performing inference', type=str2bool, default=False)
-parser.add_argument('--backprop-to-embedding', help='is backprop to embedding', type=str2bool, default=False)
+parser.add_argument('--joint-training', help='is joint training', type=str2bool, default=False)
 parser.add_argument('--using-extrinsic-reward', help='using extrinsic reward', type=str2bool, default=False)
+parser.add_argument('--inference', help='performing inference', type=str2bool, default=False)
+parser.add_argument('--path-to-model', help='path to model', default='model/model.ckpt')
 
 
 def save_to_file(directory, env_name, graph_rewards, graph_epi_lens, graph_in_rewards, graph_avg_rewards):
-    with open(directory + '/' + env_name + '_best_rewards.txt', 'a+') as reward_file:
-        for graph_reward, timestep in graph_rewards:
-            reward_file.write("%s %s\n" % (graph_reward, timestep))
-        graph_rewards[:] = []
-    with open(directory + '/' + env_name + '_ep_len.txt', 'a+') as ep_len_file:
-        for graph_epi_len, timestep in graph_epi_lens:
-            ep_len_file.write("%s %s\n" % (graph_epi_len, timestep))
-        graph_epi_lens[:] = []
-    with open(directory + '/' + env_name + '_in_rewards.txt', 'a+') as in_reward_file:
-        for graph_in_reward, timestep in graph_in_rewards:
-            in_reward_file.write("%s %s\n" % (graph_in_reward, timestep))
-        graph_in_rewards[:] = []
-    with open(directory + '/' + env_name + '_avg_rewards.txt', 'a+') as avg_reward_file:
-        for graph_avg_reward, timestep in graph_avg_rewards:
-            avg_reward_file.write("%s %s\n" % (graph_avg_reward, timestep))
-        graph_avg_rewards[:] = []
+    if len(graph_rewards) != 0:
+        with open(directory + '/' + env_name + '_best_rewards.txt', 'a+') as reward_file:
+            for graph_reward, timestep in graph_rewards:
+                reward_file.write("%s %s\n" % (graph_reward, timestep))
+            graph_rewards[:] = []
+    if len(graph_epi_lens) != 0:
+        with open(directory + '/' + env_name + '_ep_len.txt', 'a+') as ep_len_file:
+            for graph_epi_len, timestep in graph_epi_lens:
+                ep_len_file.write("%s %s\n" % (graph_epi_len, timestep))
+            graph_epi_lens[:] = []
+    if len(graph_in_rewards) != 0:
+        with open(directory + '/' + env_name + '_in_rewards.txt', 'a+') as in_reward_file:
+            for graph_in_reward, timestep in graph_in_rewards:
+                in_reward_file.write("%s %s\n" % (graph_in_reward, timestep))
+            graph_in_rewards[:] = []
+    if len(graph_avg_rewards) != 0:
+        with open(directory + '/' + env_name + '_avg_rewards.txt', 'a+') as avg_reward_file:
+            for graph_avg_reward, timestep in graph_avg_rewards:
+                avg_reward_file.write("%s %s\n" % (graph_avg_reward, timestep))
+            graph_avg_rewards[:] = []
 
 
 def inference(env, sess, env_name,
               path_to_model,
               embedding_space_size, # size of embeddings
-              is_backprop_to_embedding=False,
+              joint_training=False,
               using_extrinsic_reward=False
              ):
     # Initialize models
     emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
     fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space) if not using_extrinsic_reward else None
-    policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
-    policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    policy = Policy("policy_new", env.action_space, joint_training, emb=emb, emb_space=embedding_space_size)
+    policy_old = Policy("policy_old", env.action_space, joint_training, emb=emb, emb_space=embedding_space_size)
 
     saver = tf.train.Saver()
 
@@ -71,7 +75,7 @@ def inference(env, sess, env_name,
         env.render()
 
         s = np.array(s)
-        if is_backprop_to_embedding:
+        if joint_training:
             a, _ = policy.act([s])
         else:
             obs1 = emb.embed([s])
@@ -85,23 +89,23 @@ def inference(env, sess, env_name,
             s = s_
 
 
-def cbf(env, sess, env_name,
+def cbf(env, sess, env_name, seed,
         replay_size, # size of replay buffer
         batch_size, # size of minibatch
         n_timesteps, # number of timesteps
         len_rollouts, # length of each rollout
         n_optimizations, # number of optimization steps
         embedding_space_size, # size of embeddings
-        learning_rate, # learning rate
-        is_backprop_to_embedding=False,
+        learning_rate, # learning rate of forward dynamics
+        joint_training=False,
         using_extrinsic_reward=False
        ):
 
     # Initialize models
     emb = CnnEmbedding("embedding", env.observation_space, env.action_space, embedding_space_size)
     fd = ForwardDynamics("forward_dynamics", embedding_space_size, env.action_space) if not using_extrinsic_reward else None
-    policy = Policy("policy_new", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
-    policy_old = Policy("policy_old", env.action_space, is_backprop_to_embedding, emb=emb, emb_space=embedding_space_size)
+    policy = Policy("policy_new", env.action_space, joint_training, emb=emb, emb_space=embedding_space_size)
+    policy_old = Policy("policy_old", env.action_space, joint_training, emb=emb, emb_space=embedding_space_size)
     ppo = PPO(env, policy, policy_old,
               max_timesteps=int(n_timesteps * 1.1),
               timesteps_per_actorbatch=256,
@@ -109,7 +113,7 @@ def cbf(env, sess, env_name,
               optim_epochs=8, optim_stepsize=1e-3, optim_batchsize=64,
               gamma=0.99, lam=0.95,
               schedule='linear',
-              is_backprop_to_embedding=is_backprop_to_embedding,
+              joint_training=joint_training,
              )
 
     n_rollouts = n_timesteps // len_rollouts
@@ -133,7 +137,7 @@ def cbf(env, sess, env_name,
     ep_lens = [] # lengths of ...
 
     # Initialize history arrays
-    if is_backprop_to_embedding:
+    if joint_training:
         s_arr = np.array([np.zeros([84,84,4]) for _ in range(len_rollouts)])
     else:
         s_arr = np.array([np.zeros(embedding_space_size) for _ in range(len_rollouts)])
@@ -160,6 +164,18 @@ def cbf(env, sess, env_name,
     if not os.path.exists(directory_m):
         os.makedirs(directory_m)
 
+    txt = 'Running with env:%s, seed:%s, num timesteps:%s, joint-training:%s, using-extrinsic-reward:%s\n\n' \
+           % (env_name, seed, n_timesteps, joint_training, using_extrinsic_reward)
+    txt += 'Hyperparameters:\n - replay size:%s\n - batch size:%s\n - length of rollout:%s\n - number of optimization steps:%s\n - ' \
+           % (replay_size, batch_size, len_rollouts, n_optimizations)
+    txt += 'size of embedding:%s\n - learning rate of forward dynamics:%s\n\n' \
+           % (embedding_space_size, learning_rate)
+    txt += 'For inference on model, run:\n'
+    txt += 'python3 cbf.py --env %s --seed %s --joint-training %s ' % (env_name, seed, joint_training)
+    txt += '--inference True --path-to-model %s' % (directory_m + '/model.ckpt')
+    with open(directory + '/info.txt', 'w+') as txt_file:
+        txt_file.write(txt)
+
     for i in range(n_rollouts):
         print('# rollout: %i. timestep: %i' % (i,t,))
         for j in range(len_rollouts):
@@ -173,14 +189,14 @@ def cbf(env, sess, env_name,
 
             s = np.array(s)
             obs1 = emb.embed([s])
-            if is_backprop_to_embedding:
+            if joint_training:
                 a, vpred = policy.act([s])
             else:
                 a, vpred = policy.act(obs1)
 
             # update optimization batch variables
             idx = t % len_rollouts
-            if is_backprop_to_embedding:
+            if joint_training:
                 s_arr[idx] = s
             else:
                 s_arr[idx] = obs1
@@ -229,6 +245,8 @@ def cbf(env, sess, env_name,
         ppo.prepare({"ob" : s_arr, "rew" : r_arr, "vpred" : vpreds, "new" : dones,
                      "ac" : a_arr, "nextvpred": vpred * (1 - done),
                      "ep_rets" : ep_rets, "ep_lens" : ep_lens})
+        ep_rets = []
+        ep_lens = []
         for j in range(n_optimizations):
             # optimize theta_pi (and optionally theta_phi) wrt PPO loss
             ppo.step()
@@ -247,18 +265,21 @@ def cbf(env, sess, env_name,
 def main():
     args = parser.parse_args()
     with tf.Session() as sess:
-        env = wrap_deepmind(gym.make(args.env), episode_life=False, clip_rewards=False, frame_stack=True)
+        # env = gym.make(args.env)
+        # initializing atari environment
+        env = make_atari(args.env)
+        env = wrap_deepmind(env, frame_stack=True, scale=True)
         env.seed(args.seed)
 
         if args.inference:
             inference(env, sess, args.env,
                       path_to_model=args.path_to_model,
                       embedding_space_size=256,
-                      is_backprop_to_embedding=args.backprop_to_embedding,
+                      joint_training=args.joint_training,
                       using_extrinsic_reward=args.using_extrinsic_reward,
                      )
         else:
-            cbf(env, sess, args.env,
+            cbf(env, sess, args.env, args.seed,
                 replay_size=1000,
                 batch_size=128,
                 n_timesteps=args.num_timesteps,
@@ -266,7 +287,7 @@ def main():
                 n_optimizations=4,
                 embedding_space_size=256,
                 learning_rate=1e-5,
-                is_backprop_to_embedding=args.backprop_to_embedding,
+                joint_training=args.joint_training,
                 using_extrinsic_reward=args.using_extrinsic_reward,
                )
 

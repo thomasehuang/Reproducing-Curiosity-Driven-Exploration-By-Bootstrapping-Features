@@ -11,19 +11,19 @@ from embedding import CnnEmbedding
 
 class Policy(object):
     recurrent = False
-    def __init__(self, name, ac_space, is_backprop_to_embedding, emb_space=None, emb=None):
+    def __init__(self, name, ac_space, joint_training, emb_space=None, emb=None):
         with tf.variable_scope(name):
             self.scope = tf.get_variable_scope().name
-            self._init(ac_space, is_backprop_to_embedding, emb_space, emb)
+            self._init(ac_space, joint_training, emb_space, emb)
 
-    def _init(self, ac_space, is_backprop_to_embedding, emb_space=None, emb=None):
+    def _init(self, ac_space, joint_training, emb_space=None, emb=None):
         self.pdtype = pdtype = make_pdtype(ac_space)
 
         # self.input = U.get_placeholder(name="ob", dtype=tf.float32, shape=[sequence_length, 512])
         self.emb = emb
-        self.is_backprop_to_embedding = is_backprop_to_embedding
+        self.joint_training = joint_training
         size = 128
-        if self.is_backprop_to_embedding:
+        if self.joint_training:
             self.input, output = emb.get_input_and_last_layer()
             x = tf.nn.relu(linear(output, size, 'lin1', normalized_columns_initializer(1.0)))
         else:
@@ -42,13 +42,13 @@ class Policy(object):
         sess = tf.get_default_session()
         return sess.run([self.ac, self.vpred], {self.input: input})
     def get_variables(self):
-        if self.is_backprop_to_embedding:
+        if self.joint_training:
             return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope) + \
                    tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.emb.scope)
         else:
             return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
     def get_trainable_variables(self):
-        if self.is_backprop_to_embedding:
+        if self.joint_training:
             return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope) + \
                    tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.emb.scope)
         else:

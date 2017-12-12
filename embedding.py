@@ -20,8 +20,8 @@ class CnnEmbedding(object):
         self.input = U.get_placeholder(name="ob_f", dtype=tf.float32, shape=[None] + list(ob_space.shape))
         self.embedding_space = embedding_space_size
 
-        x = self.input / 255.0
-        x = tf.nn.relu(conv2d(x, 32, "l1", [8, 8], [4, 4], pad="VALID"))
+        # x = self.input / 255.0
+        x = tf.nn.relu(conv2d(self.input, 32, "l1", [8, 8], [4, 4], pad="VALID"))
         x = tf.nn.relu(conv2d(x, 64, "l2", [4, 4], [2, 2], pad="VALID"))
         x = tf.nn.relu(conv2d(x, 64, "l3", [3, 3], [1, 1], pad="VALID"))
         x = flatten(x)
