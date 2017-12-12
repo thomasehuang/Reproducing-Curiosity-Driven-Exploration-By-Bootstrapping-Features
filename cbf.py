@@ -8,6 +8,7 @@ from policy import *
 from forward_dynamics import *
 
 from atari_wrappers import wrap_deepmind, make_atari
+from baselines.common import set_global_seeds
 from ppo import PPO
 from replay_memory import ReplayMemory
 
@@ -269,6 +270,7 @@ def main():
         # initializing atari environment
         env = make_atari(args.env)
         env = wrap_deepmind(env, frame_stack=True, scale=True)
+        set_global_seeds(args.seed)
         env.seed(args.seed)
 
         if args.inference:
@@ -283,10 +285,10 @@ def main():
                 replay_size=1000,
                 batch_size=128,
                 n_timesteps=args.num_timesteps,
-                len_rollouts=64,
-                n_optimizations=4,
+                len_rollouts=128,
+                n_optimizations=2,
                 embedding_space_size=256,
-                learning_rate=1e-5,
+                learning_rate=1e-3,
                 joint_training=args.joint_training,
                 using_extrinsic_reward=args.using_extrinsic_reward,
                )
