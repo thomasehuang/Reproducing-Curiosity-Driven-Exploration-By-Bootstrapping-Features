@@ -25,7 +25,7 @@ class ForwardDynamics(object):
         f = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
         f = linear(f, self.phi1.get_shape()[1].value, "flast", normalized_columns_initializer(0.01))
         self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f, self.phi2)), name='forwardloss')
-        self.forwardloss = self.forwardloss / 512.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
+        self.forwardloss = self.forwardloss / 1024.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
 
         self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.forwardloss, var_list=self.get_trainable_variables())
 

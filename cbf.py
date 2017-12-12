@@ -269,7 +269,7 @@ def main():
         # env = gym.make(args.env)
         # initializing atari environment
         env = make_atari(args.env)
-        env = wrap_deepmind(env, frame_stack=True, scale=True)
+        env = wrap_deepmind(env, clip_rewards=False, frame_stack=True, scale=True)
         set_global_seeds(args.seed)
         env.seed(args.seed)
 
@@ -288,7 +288,7 @@ def main():
                 len_rollouts=128,
                 n_optimizations=2,
                 embedding_space_size=256,
-                learning_rate=1e-3,
+                learning_rate=1e-5,
                 joint_training=args.joint_training,
                 using_extrinsic_reward=args.using_extrinsic_reward,
                )
