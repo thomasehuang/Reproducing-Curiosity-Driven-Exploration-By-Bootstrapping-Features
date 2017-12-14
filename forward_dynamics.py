@@ -25,10 +25,17 @@ class ForwardDynamics(object):
         # forward model: f(phi1,asample) -> phi2
         # Note: no backprop to asample of policy: it is treated as fixed for predictor training
         f = tf.concat([self.phi1, asample], 1)
+<<<<<<< HEAD
         f1 = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
         f2 = linear(f1, self.phi1.get_shape()[1].value, "f2", normalized_columns_initializer(0.01))
         self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f2, self.phi2)), name='forwardloss')
         self.forwardloss = self.forwardloss  # lenFeatures=288. Factored out to make hyperparams not depend on it.
+=======
+        f = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
+        f = linear(f, self.phi1.get_shape()[1].value, "flast", normalized_columns_initializer(0.01))
+        self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f, self.phi2)), name='forwardloss')
+        self.forwardloss = self.forwardloss / 1024.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
+>>>>>>> 68cee8470824d050f3f026e53c344284b81476ef
 
         # self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.forwardloss, var_list=self.get_trainable_variables())
 
