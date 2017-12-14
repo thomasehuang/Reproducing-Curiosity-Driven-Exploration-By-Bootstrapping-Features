@@ -21,11 +21,11 @@ class CnnEmbedding(object):
         self.embedding_space = embedding_space_size
 
         # x = self.input / 255.0
-        x = tf.nn.relu(conv2d(self.input, 32, "l1", [8, 8], [4, 4], pad="VALID"))
-        x = tf.nn.relu(conv2d(x, 64, "l2", [4, 4], [2, 2], pad="VALID"))
-        x = tf.nn.relu(conv2d(x, 64, "l3", [3, 3], [1, 1], pad="VALID"))
+        x = tf.nn.relu(conv2d(self.input, 32, "cnn1", [8, 8], [4, 4], pad="VALID"))
+        x = tf.nn.relu(conv2d(x, 64, "cnn2", [4, 4], [2, 2], pad="VALID"))
+        x = tf.nn.relu(conv2d(x, 64, "cnn3", [3, 3], [1, 1], pad="VALID"))
         x = flatten(x)
-        self.x = tf.nn.relu(linear(x, self.embedding_space, 'lin', normalized_columns_initializer(1.0)))
+        self.x = tf.nn.relu(linear(x, self.embedding_space, 'linlast', normalized_columns_initializer(1.0)))
 
     def embed(self, state):
         sess = tf.get_default_session()

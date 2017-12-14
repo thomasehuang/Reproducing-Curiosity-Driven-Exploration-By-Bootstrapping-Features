@@ -1,5 +1,8 @@
 #!/bin/sh python3
 
+import baselines.common.tf_util as U
+from baselines.common.mpi_adam import MpiAdam
+from mpi4py import MPI
 import tensorflow as tf
 from models import linear, normalized_columns_initializer
 from utils import get_placeholder
@@ -17,17 +20,24 @@ class ForwardDynamics(object):
         self.phi2 = tf.placeholder(dtype=tf.float32, shape=[None, emb_space], name='phi2')
 
         self.asample = asample = tf.placeholder(tf.float32, [None, ac_space.n])
-        self.learning_rate = tf.placeholder(tf.float32, ())
+        # self.learning_rate = tf.placeholder(tf.float32, ())
 
         # forward model: f(phi1,asample) -> phi2
         # Note: no backprop to asample of policy: it is treated as fixed for predictor training
         f = tf.concat([self.phi1, asample], 1)
-        f = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
-        f = linear(f, self.phi1.get_shape()[1].value, "flast", normalized_columns_initializer(0.01))
-        self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f, self.phi2)), name='forwardloss')
-        self.forwardloss = self.forwardloss / 512.0  # lenFeatures=288. Factored out to make hyperparams not depend on it.
+        f1 = tf.nn.relu(linear(f, 128, "f1", normalized_columns_initializer(0.01)))
+        f2 = linear(f1, self.phi1.get_shape()[1].value, "f2", normalized_columns_initializer(0.01))
+        self.forwardloss = 0.5 * tf.reduce_sum(tf.square(tf.subtract(f2, self.phi2)), name='forwardloss')
+        self.forwardloss = self.forwardloss  # lenFeatures=288. Factored out to make hyperparams not depend on it.
 
-        self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.forwardloss, var_list=self.get_trainable_variables())
+        # self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.forwardloss, var_list=self.get_trainable_variables())
+
+        var_list = self.get_trainable_variables()
+        self.lossandgrad = U.function([self.phi1, self.phi2, self.asample], [self.forwardloss] + [U.flatgrad(self.forwardloss, var_list)])
+        self.adam = MpiAdam(var_list, epsilon=1e-5)
+        
+        U.initialize()
+        self.adam.sync()
 
     def get_loss(self, phi1, phi2, asample):
         sess = tf.get_default_session()
@@ -39,8 +49,13 @@ class ForwardDynamics(object):
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
     def train(self, phi1, phi2, asample, learning_rate):
-        sess = tf.get_default_session()
-        sess.run(self.train_step, {self.phi1: phi1,
-                                   self.phi2: phi2,
-                                   self.asample: asample,
-                                   self.learning_rate: learning_rate})
+        *newlosses, g = self.lossandgrad(phi1, phi2, asample)
+        self.adam.update(g, learning_rate)
+        print(newlosses)
+        print(g)
+    # def train(self, phi1, phi2, asample, learning_rate):
+    #     sess = tf.get_default_session()
+    #     sess.run(self.train_step, {self.phi1: phi1,
+    #                                self.phi2: phi2,
+    #                                self.asample: asample,
+    #                                self.learning_rate: learning_rate})

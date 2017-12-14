@@ -11,8 +11,11 @@ from collections import deque
 from atari_wrappers import wrap_deepmind
 import gym
 
+from policy import *
+
 class PPO(object):
-    def __init__(self, env, policy_new, policy_old,
+    def __init__(self, env, policy, 
+                 emb_network, emb_size,
                  timesteps_per_actorbatch, # timesteps per actor per update
                  clip_param, entcoeff, # clipping parameter epsilon, entropy coeff
                  optim_epochs, optim_stepsize, optim_batchsize,# optimization hypers
@@ -35,48 +38,49 @@ class PPO(object):
 
         # Setup losses and stuff
         # ----------------------------------------
-        ob_space = env.observation_space
-        ac_space = env.action_space
-        self.pi = policy_new # Construct network for new policy
-        oldpi = policy_old # Network for old policy
-        atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
-        ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
+        with tf.name_scope('ppo'):
+            ob_space = env.observation_space
+            ac_space = env.action_space
+            self.pi = policy # Construct network for new policy
+            oldpi = Policy("old_policy", env.action_space, joint_training, emb_size, emb_network) # Network for old policy
+            atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
+            ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
-        lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
-        clip_param = clip_param * lrmult # Annealed cliping parameter epislon
+            lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
+            clip_param = clip_param * lrmult # Annealed cliping parameter epislon
 
-        # ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None] + list(ob_space.shape))
-        if joint_training:
-            ob = U.get_placeholder_cached(name="ob_f")
-        else:
-            ob = U.get_placeholder_cached(name="ob")
-        ac = self.pi.pdtype.sample_placeholder([None])
+            # ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None] + list(ob_space.shape))
+            if joint_training:
+                ob = U.get_placeholder_cached(name="ob_f")
+            else:
+                ob = U.get_placeholder_cached(name="ob")
+            ac = self.pi.pdtype.sample_placeholder([None])
 
-        kloldnew = oldpi.pd.kl(self.pi.pd)
-        ent = self.pi.pd.entropy()
-        meankl = U.mean(kloldnew)
-        meanent = U.mean(ent)
-        pol_entpen = (-entcoeff) * meanent
+            kloldnew = oldpi.pd.kl(self.pi.pd)
+            ent = self.pi.pd.entropy()
+            meankl = U.mean(kloldnew)
+            meanent = U.mean(ent)
+            pol_entpen = (-entcoeff) * meanent
 
-        ratio = tf.exp(self.pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
-        surr1 = ratio * atarg # surrogate from conservative policy iteration
-        surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
-        pol_surr = - U.mean(tf.minimum(surr1, surr2)) # PPO's pessimistic surrogate (L^CLIP)
-        vf_loss = U.mean(tf.square(self.pi.vpred - ret))
-        self.total_loss = pol_surr + pol_entpen + vf_loss
-        losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
-        self.loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
+            ratio = tf.exp(self.pi.pd.logp(ac) - oldpi.pd.logp(ac)) # pnew / pold
+            surr1 = ratio * atarg # surrogate from conservative policy iteration
+            surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg #
+            pol_surr = - U.mean(tf.minimum(surr1, surr2)) # PPO's pessimistic surrogate (L^CLIP)
+            vf_loss = U.mean(tf.square(self.pi.vpred - ret))
+            self.total_loss = pol_surr + pol_entpen + vf_loss
+            losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
+            self.loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
 
-        var_list = self.pi.get_trainable_variables()
-        self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(self.total_loss, var_list)])
-        self.adam = MpiAdam(var_list, epsilon=adam_epsilon)
+            var_list = self.pi.get_trainable_variables()
+            self.lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(self.total_loss, var_list)])
+            self.adam = MpiAdam(var_list, epsilon=adam_epsilon)
 
-        self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
-            for (oldv, newv) in zipsame(oldpi.get_variables(), self.pi.get_variables())])
-        self.compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
+            self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
+                for (oldv, newv) in zipsame(oldpi.get_variables(), self.pi.get_variables())])
+            self.compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
 
-        U.initialize()
-        self.adam.sync()
+            U.initialize()
+            self.adam.sync()
 
         # Prepare for rollouts
         # ----------------------------------------
@@ -92,10 +96,13 @@ class PPO(object):
 
 
     def prepare(self, batch):
+        if self.timesteps_so_far >= self.max_timesteps:
+            return False
+
         if self.schedule == 'constant':
             self.cur_lrmult = 1.0
         elif self.schedule == 'linear':
-            self.cur_lrmult =  max(1.0 - float(self.timesteps_so_far) / self.max_timesteps, 0)
+            self.cur_lrmult =  max(1.0 - float(self.timesteps_so_far) / (self.max_timesteps * 1.1), 0)
         else:
             raise NotImplementedError
 
@@ -114,6 +121,11 @@ class PPO(object):
 
         self.assign_old_eq_new() # set old parameter values to new parameter values
 
+        logger.log("Optimizing...")
+        logger.log(fmt_row(13, self.loss_names))
+
+        return True
+
 
     def step(self):
         # Here we do a bunch of optimization epochs over the data
@@ -123,8 +135,8 @@ class PPO(object):
                 # self.train(b["ob"], b["ac"], b["atarg"], b["vtarg"], self.cur_lrmult)
                 *newlosses, g = self.lossandgrad(b["ob"], b["ac"], b["atarg"], b["vtarg"], self.cur_lrmult)
                 self.adam.update(g, self.optim_stepsize * self.cur_lrmult)
-                # losses.append(newlosses)
-            # logger.log(fmt_row(13, np.mean(losses, axis=0)))
+                losses.append(newlosses)
+            logger.log(fmt_row(13, np.mean(losses, axis=0)))
 
     
     def log(self):
@@ -154,6 +166,7 @@ class PPO(object):
         logger.record_tabular("TimeElapsed", time.time() - self.tstart)
         if MPI.COMM_WORLD.Get_rank()==0:
             logger.dump_tabular()
+
 
     def add_vtarg_and_adv(self, seg, gamma, lam):
         """
