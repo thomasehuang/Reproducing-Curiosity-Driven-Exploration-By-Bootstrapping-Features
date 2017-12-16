@@ -16,7 +16,6 @@ from policy import *
 class PPO(object):
     def __init__(self, env, policy, 
                  emb_network, emb_size,
-                 timesteps_per_actorbatch, # timesteps per actor per update
                  clip_param, entcoeff, # clipping parameter epsilon, entropy coeff
                  optim_epochs, optim_stepsize, optim_batchsize,# optimization hypers
                  gamma, lam, # advantage estimation
@@ -26,7 +25,6 @@ class PPO(object):
                  joint_training=False
                  ):
         # Setup variables
-        self.timesteps_per_actorbatch = timesteps_per_actorbatch
         self.optim_epochs = optim_epochs
         self.optim_stepsize = optim_stepsize
         self.optim_batchsize = optim_batchsize

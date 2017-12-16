@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
 
     env = make_atari(args.env)
-    env = wrap_deepmind(env, clip_rewards=False, frame_stack=True, scale=True)
+    env = wrap_deepmind(env, episode_life=False, clip_rewards=False, frame_stack=True, scale=True)
     set_global_seeds(args.seed)
     env.seed(args.seed)
 

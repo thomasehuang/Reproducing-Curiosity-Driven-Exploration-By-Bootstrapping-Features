@@ -22,7 +22,7 @@ class Policy(object):
 
         self.emb_network = emb_network
         self.joint_training = joint_training
-        size = 128
+        size = 256
         if self.joint_training:
             self.input, output = emb_network.get_input_and_last_layer()
             x = tf.nn.relu(linear(output, size, 'lin1', normalized_columns_initializer(1.0)))

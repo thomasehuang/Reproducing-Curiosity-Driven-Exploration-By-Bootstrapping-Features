@@ -14,8 +14,6 @@ class CnnEmbedding(object):
     def _init(self, ob_space, ac_space, embedding_space_size):
         assert isinstance(ob_space, gym.spaces.Box)
 
-        sequence_length = None
-
         # self.input = tf.placeholder(dtype=tf.float32, shape=[sequence_length] + list(ob_space.shape))
         self.input = U.get_placeholder(name="ob_f", dtype=tf.float32, shape=[None] + list(ob_space.shape))
         self.embedding_space = embedding_space_size
@@ -25,17 +23,14 @@ class CnnEmbedding(object):
         x = tf.nn.relu(conv2d(x, 64, "cnn2", [4, 4], [2, 2], pad="VALID"))
         x = tf.nn.relu(conv2d(x, 64, "cnn3", [3, 3], [1, 1], pad="VALID"))
         x = flatten(x)
-        self.x = tf.nn.relu(linear(x, self.embedding_space, 'linlast', normalized_columns_initializer(1.0)))
+        self.output = tf.nn.relu(linear(x, self.embedding_space, 'linlast', normalized_columns_initializer(1.0)))
 
     def embed(self, state):
         sess = tf.get_default_session()
-        return sess.run(self.x, {self.input: state})
+        return sess.run(self.output, {self.input: state})
     def get_input_and_last_layer(self):
-        return [self.input, self.x]
+        return [self.input, self.output]
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
-    def get_embedding_space(self):
-        return self.embedding_space
-
