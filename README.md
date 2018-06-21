@@ -1,7 +1,9 @@
 README
 ======
 
-The repository for reproducing the code of the paper [*Curiosity-driven Exploration by Bootstrapping Features*](https://openreview.net/forum?id=S1gWUifW0b&noteId=S1gWUifW0b).
+The repository for reproducing the code of the paper *Curiosity-driven Exploration by Bootstrapping Features*.
+
+Our report can be found [here](report.pdf).
 
 RUN INSTRUCTIONS
 ================
